@@ -1,4 +1,5 @@
 class F2c < Formula
+  desc "Compiler from Fortran to C"
   homepage "http://www.netlib.org/f2c/"
   head "http://netlib.sandia.gov/cgi-bin/netlib/netlibfiles.tar?filename=netlib/f2c"
 
@@ -36,8 +37,8 @@ class F2c < Formula
             end
     EOS
     system "#{bin}/f2c", "test.f"
-    assert (testpath/"test.c").exist?
+    assert_predicate testpath/"test.c", :exist?
     system "cc", "-O", "-o", "test", "test.c", "-lf2c"
     assert_equal " hello world\n", shell_output("#{testpath}/test")
   end
-end 
+end
