@@ -9,7 +9,7 @@ class Cm3 < Formula
     system "./cminstall", prefix
 
     inreplace bin/"cm3.cfg" do |s|
-      s.gsub! "SL", ""/""
+      s.gsub! "SL", "\"/\""
       s.gsub! "path()", "\"#{bin}\""
     end
 
