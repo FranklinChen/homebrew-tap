@@ -4,8 +4,13 @@ class Hugs < Formula
   head "https://github.com/FranklinChen/hugs98-plus-Sep2006.git"
 
   depends_on "readline"
+  depends_on "libx11" => :recommended
+  depends_on "freealut" => :recommended
 
   def install
+    ENV["CFLAGS"] = "-Wno-error=implicit-function-declaration"
+    ENV["LDFLAGS"] = "-L/usr/local/opt/freealut/lib"
+    ENV["CPPFLAGS"] = "-I/usr/local/opt/freealut/include"
     system "./configure", "--prefix=#{prefix}"
     system "make"
     system "make", "install"
