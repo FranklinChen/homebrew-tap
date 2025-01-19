@@ -3,6 +3,7 @@ class Hugs < Formula
   homepage "https://www.haskell.org/hugs/"
   head "https://github.com/FranklinChen/hugs98-plus-Sep2006.git"
 
+  depends_on "autoconf" => :build
   depends_on "readline"
   depends_on "libx11" => :recommended
   depends_on "freealut" => :recommended
