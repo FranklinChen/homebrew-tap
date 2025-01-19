@@ -8,16 +8,18 @@ class Hugs < Formula
   depends_on "freealut" => :recommended
 
   def install
-    ENV["CFLAGS"] = "-Wno-error=implicit-function-declaration"
-    ENV["LDFLAGS"] = "-L/usr/local/opt/freealut/lib"
-    ENV["CPPFLAGS"] = "-I/usr/local/opt/freealut/include"
+    freealut_prefix = Formula["freealut"].opt_prefix
+
+    ENV["CFLAGS"] = "-Wno-error=implicit-function-declaration -Wno-error=implicit-int"
+    ENV["LDFLAGS"] = "-L#{freealut_prefix}/lib"
+    ENV["CPPFLAGS"] = "-I#{freealut_prefix}/include"
     system "./configure", "--prefix=#{prefix}"
     system "make"
     system "make", "install"
   end
 
   test do
-    (testpath/"hello.hs").write <<-EOS.undent
+    (testpath/"hello.hs").write <<~EOS
       import Data.List (sort)
 
       main :: IO ()
