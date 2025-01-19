@@ -11,6 +11,7 @@ class Hugs < Formula
   def install
     freealut_prefix = Formula["freealut"].opt_prefix
 
+    ENV.prepend_path "PATH", Formula["autoconf"].opt_bin
     ENV["CFLAGS"] = "-Wno-error=implicit-function-declaration -Wno-error=implicit-int"
     ENV["LDFLAGS"] = "-L#{freealut_prefix}/lib"
     ENV["CPPFLAGS"] = "-I#{freealut_prefix}/include"
