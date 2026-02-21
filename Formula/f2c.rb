@@ -1,12 +1,19 @@
 class F2c < Formula
   desc "Compiler from Fortran to C"
-  homepage "http://www.netlib.org/f2c/"
-  head "http://netlib.sandia.gov/cgi-bin/netlib/netlibfiles.tar?filename=netlib/f2c"
+  homepage "https://www.netlib.org/f2c/"
+  url "https://netlib.org/f2c/src.tgz"
+  version "20250303"
+  sha256 "b2824a6f7b75ffe0193ce9ba55463191a7af7c2ffe10e371e372451e2b527e09"
+
+  resource "libf2c" do
+    url "https://netlib.org/f2c/libf2c.zip"
+    sha256 "cc84253b47b5c036aa1d529332a6c218a39ff71c76974296262b03776f822695"
+  end
 
   def install
-    system "unzip", "libf2c.zip", "-d", "libf2c"
-    # f2c header and libf2c.a
-    cd "libf2c" do
+    ENV["CFLAGS"] = "-Wno-error=implicit-function-declaration -Wno-error=implicit-int"
+
+    resource("libf2c").stage do
       system "make", "-f", "makefile.u", "f2c.h"
       include.install "f2c.h"
 
@@ -14,31 +21,25 @@ class F2c < Formula
       lib.install "libf2c.a"
     end
 
-    # f2c executable
-    cd "src" do
-      system "make", "-f", "makefile.u", "f2c"
-      bin.install "f2c"
-    end
+    system "make", "-f", "makefile.u", "f2c"
+    bin.install "f2c"
 
-    # man pages
     man1.install "f2c.1t"
   end
 
   test do
-    # check if executable doesn't error out
-    system "#{bin}/f2c", "--version"
+    system bin/"f2c", "--version"
 
-    # hello world test
-    (testpath/"test.f").write <<-EOS.undent
+    (testpath/"test.f").write <<~EOS
       C comment line
             program hello
             print*, 'hello world'
             stop
             end
     EOS
-    system "#{bin}/f2c", "test.f"
-    assert_predicate testpath/"test.c", :exist?
-    system "cc", "-O", "-o", "test", "test.c", "-lf2c"
+    system bin/"f2c", "test.f"
+    assert_path_exists testpath/"test.c"
+    system ENV.cc, "-O", "-o", "test", "test.c", "-L#{lib}", "-I#{include}", "-lf2c"
     assert_equal " hello world\n", shell_output("#{testpath}/test")
   end
 end
