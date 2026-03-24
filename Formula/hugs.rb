@@ -5,8 +5,8 @@ class Hugs < Formula
 
   depends_on "autoconf" => :build
   depends_on "readline"
-  depends_on "libx11" => :recommended
   depends_on "freealut" => :recommended
+  depends_on "libx11" => :recommended
 
   def install
     freealut_prefix = Formula["freealut"].opt_prefix

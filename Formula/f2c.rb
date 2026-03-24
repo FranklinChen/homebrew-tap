@@ -5,6 +5,11 @@ class F2c < Formula
   version "20250303"
   sha256 "b2824a6f7b75ffe0193ce9ba55463191a7af7c2ffe10e371e372451e2b527e09"
 
+  livecheck do
+    url "https://www.netlib.org/f2c/00lastchange"
+    regex(/^(\d{8})\b/i)
+  end
+
   resource "libf2c" do
     url "https://netlib.org/f2c/libf2c.zip"
     sha256 "cc84253b47b5c036aa1d529332a6c218a39ff71c76974296262b03776f822695"
