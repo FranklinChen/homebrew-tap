@@ -50,8 +50,8 @@ When a new upstream release is available, update the formula as described below.
 
 Upstream releases are at <https://github.com/modula3/cm3/releases>. Three things need updating:
 
-1. **Main source URL + SHA256** — replace the tag in the `url` (e.g. `d5.11.10` → `d5.12.0`) and recompute the `sha256` for the new archive.
-2. **Bootstrap resource URL + SHA256** — replace the tag and version in the resource `url`. The asset filename includes the version (e.g. `cm3-boot-AMD64_LINUX-d5.11.10.tar.xz`). Despite the `AMD64_LINUX` name, this tarball works on all 64-bit little-endian Unix including macOS (both Intel and Apple Silicon) — there is no separate macOS asset. Check the release assets page for the exact filename, then recompute the `sha256`.
+1. **Main source URL + SHA256** — replace the tag in the `url` (e.g. `d5.12.0` → `d5.13.0`) and recompute the `sha256` for the new archive.
+2. **Bootstrap resource URL + SHA256** — replace the tag and version in the resource `url`. The asset filename includes the version (e.g. `cm3-boot-AMD64_LINUX-d5.12.0.tar.xz`). Despite the `AMD64_LINUX` name, this tarball works on all 64-bit little-endian Unix including macOS (both Intel and Apple Silicon) — there is no separate macOS asset. Check the release assets page for the exact filename, then recompute the `sha256`.
 3. The version is inferred from the URL, so no separate `version` field to change.
 
 ### f2c.rb

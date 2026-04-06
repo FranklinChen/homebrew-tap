@@ -1,8 +1,8 @@
 class Cm3 < Formula
   desc "Critical Mass Modula-3 compiler and runtime"
   homepage "https://github.com/modula3/cm3"
-  url "https://github.com/modula3/cm3/archive/refs/tags/d5.11.10.tar.gz"
-  sha256 "353547eea26d02814c1808f4e8b4b3d15f9cf5dd30a7a3d49884a63475c20cf1"
+  url "https://github.com/modula3/cm3/archive/refs/tags/d5.12.0.tar.gz"
+  sha256 "517c0eaca6cde1cf9eae227d9e6e74e786e77ec5f927a4d5999e6c29ad819f2e"
   license :cannot_represent
 
   livecheck do
@@ -15,8 +15,8 @@ class Cm3 < Formula
   depends_on "ninja" => :build
 
   resource "bootstrap" do
-    url "https://github.com/modula3/cm3/releases/download/d5.11.10/cm3-boot-AMD64_LINUX-d5.11.10.tar.xz"
-    sha256 "9a77e9209b0ea19a0c93706f52a46f0b43e16959c8cf4a4202f9803d179b4170"
+    url "https://github.com/modula3/cm3/releases/download/d5.12.0/cm3-boot-AMD64_LINUX-d5.12.0.tar.xz"
+    sha256 "7ff6bba38c4926379410da57ad97dcb6d31ebb19c5bc557b49d6dead20e02b01"
   end
 
   def install

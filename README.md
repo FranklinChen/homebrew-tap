@@ -48,7 +48,7 @@ $ brew install FranklinChen/tap/cm3
 
 Modula-3 was designed in the late 1980s by Luca Cardelli, Jim Donahue, Mick Jordan, Bill Kalsow, and Greg Nelson at the [Digital Equipment Corporation Systems Research Center](https://en.wikipedia.org/wiki/DEC_Systems_Research_Center) (DEC SRC) and Olivetti Research Center, as a successor to Niklaus Wirth's Modula-2. The language added garbage collection, exception handling, objects, generics, and threads to the Modula lineage while keeping the emphasis on safe, modular interfaces.
 
-DEC SRC produced the first compiler (SRC Modula-3) and a rich set of libraries including the Trestle window toolkit and FormsVBT GUI builder. After DEC was acquired by Compaq and then Hewlett-Packard, the compiler was maintained as "Critical Mass Modula-3" (CM3) by a community that included several of the original DEC SRC engineers. The project went through periods of dormancy but was revived on GitHub, with release d5.11.10 appearing in February 2026.
+DEC SRC produced the first compiler (SRC Modula-3) and a rich set of libraries including the Trestle window toolkit and FormsVBT GUI builder. After DEC was acquired by Compaq and then Hewlett-Packard, the compiler was maintained as "Critical Mass Modula-3" (CM3) by a community that included several of the original DEC SRC engineers. The project went through periods of dormancy but was revived on GitHub, with release d5.12.0 appearing in March 2026.
 
 ## Sather
 
