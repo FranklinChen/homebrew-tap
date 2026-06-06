@@ -1,7 +1,7 @@
 class Hugs < Formula
   desc "Haskell implementation called Hugs"
   homepage "https://www.haskell.org/hugs/"
-  head "https://github.com/FranklinChen/hugs98-plus-Sep2006.git"
+  head "https://github.com/FranklinChen/hugs98-plus-Sep2006.git", branch: "master"
 
   depends_on "autoconf" => :build
   depends_on "readline"

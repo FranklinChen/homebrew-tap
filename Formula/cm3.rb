@@ -16,7 +16,7 @@ class Cm3 < Formula
 
   resource "bootstrap" do
     url "https://github.com/modula3/cm3/releases/download/d5.12.0/cm3-boot-AMD64_LINUX-d5.12.0.tar.xz"
-    sha256 "7ff6bba38c4926379410da57ad97dcb6d31ebb19c5bc557b49d6dead20e02b01"
+    sha256 "a9c672958a29656856038b074addaa109c082f0bc2c7de3e3b98fd53d1bd636b"
   end
 
   def install
@@ -44,12 +44,12 @@ class Cm3 < Formula
     system "cmake", "--build", boot_build
     system "cmake", "--install", boot_build
 
-    # Stage 2: full upgrade from Modula-3 sources (headless — no X11/GUI)
+    # Stage 2: full upgrade from Modula-3 sources (headless, no X11/GUI)
     ENV.prepend_path "PATH", bin
     ENV["CM3_INSTALL"] = prefix.to_s
     system "python3", "scripts/concierge.py", "full-upgrade", "--backend", "c", "headless"
 
-    # Re-sign Mach-O binaries — the build modifies them after linking,
+    # Re-sign Mach-O binaries: the build modifies them after linking,
     # invalidating ad-hoc code signatures (same pattern as unicon.rb).
     [bin, lib].each do |dir|
       Dir[dir/"**/*"].each do |f|
