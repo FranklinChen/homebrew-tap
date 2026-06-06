@@ -18,7 +18,7 @@ $ brew install FranklinChen/tap/f2c
 
 Because `f77` was itself written in C and used a C compiler back end, f2c inherited excellent portability. After its release as free software through [Netlib](https://www.netlib.org/), f2c became one of the most common ways to compile Fortran code on systems where native Fortran compilers were unavailable or expensive. Several large Fortran libraries, including LAPACK, were made available as C libraries via f2c. The tool also influenced the development of GNU `g77`.
 
-Unlike the other formulae in this tap, f2c is still actively maintained by David M. Gay. The Netlib source receives periodic updates, with the most recent in March 2024.
+Unlike the other formulae in this tap, f2c is still actively maintained by David M. Gay. The Netlib source receives periodic updates, with the most recent on March 3, 2025.
 
 ## Hugs
 
@@ -81,3 +81,19 @@ $ brew install FranklinChen/tap/unicon
 Ralph Griswold designed Icon at the University of Arizona in the late 1970s as a successor to SNOBOL4, emphasizing goal-directed evaluation and string processing with generators. Clint Jeffery, a student of Griswold, began extending Icon in the 1990s with object orientation, networking, and POSIX interfaces. This work became Unicon, developed at the University of Texas at San Antonio and later the University of Idaho.
 
 Unlike the other formulae in this tap, Unicon is actively maintained, with commits through 2026 and ongoing work including a language server protocol implementation. The formula builds with 2D graphics support via Homebrew's X11 libraries; 3D graphics require [XQuartz](https://www.xquartz.org/).
+
+## Caml Light
+
+[Caml Light](https://github.com/FranklinChen/camllight) is a small, portable bytecode implementation of Caml, a functional language from the ML family. The compiler, linker, librarian, and standard library are written in Caml Light and fully bootstrapped; the runtime and bytecode interpreter are written in standard C, so the whole system is tiny (roughly 100K of runtime plus 100K of bytecode compiler) and easy to port.
+
+```console
+$ brew install --HEAD FranklinChen/tap/camllight
+```
+
+This is a head-only formula. The wrapper scripts (`camlc`, `camllight`, `camlmktop`) have their standard-library path baked in at build time, so the formula sets `LIBDIR` during the build, not just at install. For modern ML programming, use [OCaml](https://ocaml.org/) instead.
+
+### History
+
+The name Caml stands for Categorical Abstract Machine Language; the original Caml was built at the [Institut National de Recherche en Informatique et en Automatique](https://www.inria.fr/) (INRIA) in France in the mid-1980s. Caml Light, begun around 1990, was a lighter reimplementation centered on a bytecode interpreter written in C, small enough to run on the personal computers of the era. It was designed and produced at INRIA by Xavier Leroy, Damien Doligez, François Rouaix, Jérôme Vouillon, and Pierre Weis, and became a standard teaching language in French higher education through the 1990s.
+
+INRIA's last official release was 0.75, dated January 1999. The research lineage continued elsewhere: Xavier Leroy's Caml Special Light (1995) added a powerful module system, and that work became Objective Caml (OCaml) in 1996, which remains in wide use today. Maintenance of Caml Light itself was later carried on by François Boisson, who took the system from 0.76 through 0.82, with fixes dated 2009 to 2013 addressing 64-bit memory bugs and warnings from modern C compilers. The formula in this tap builds from [a personal fork](https://github.com/FranklinChen/camllight) that patches the 0.82 source to compile and bootstrap on modern macOS.
