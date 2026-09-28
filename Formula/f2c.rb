@@ -4,6 +4,10 @@ class F2c < Formula
   url "https://netlib.org/f2c/src.tgz"
   version "20250303"
   sha256 "b2824a6f7b75ffe0193ce9ba55463191a7af7c2ffe10e371e372451e2b527e09"
+  # src/Notice is the 1990-1997 AT&T/Lucent/Bellcore permission notice, which
+  # matches the SPDX SMLNJ template (its advertising and disclaimer clauses
+  # take the holder names as variables).
+  license "SMLNJ"
 
   livecheck do
     url "https://www.netlib.org/f2c/00lastchange"

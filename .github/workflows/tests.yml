@@ -1,0 +1,92 @@
+# CI for the tap. The design is documented in AGENTS.md, section
+# "Continuous Integration"; keep the rationale there, not here.
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  schedule:
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request supersedes the running checks. Runs on
+# master and scheduled runs always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash -xeuo pipefail {0}
+
+jobs:
+  syntax:
+    runs-on: macos-26
+    steps:
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@e99025eb970cfa124b8284a35463d87426917478 # 2026.09.28.1
+
+      # Only this job saves the gem cache: it installs every gem group the
+      # build jobs need and more, so a build job saving first would leave the
+      # cache without the style and audit gems.
+      - name: Cache Homebrew Bundler RubyGems
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.set-up-homebrew.outputs.gems-path }}
+          key: ${{ runner.os }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: ${{ runner.os }}-rubygems-
+
+      - run: brew test-bot --only-cleanup-before
+
+      - run: brew test-bot --only-setup
+
+      - run: brew test-bot --only-tap-syntax
+
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      formulae: ${{ steps.list.outputs.formulae }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: List formulae
+        id: list
+        run: |
+          formulae="$(jq -nc '$ARGS.positional | map(ltrimstr("Formula/") | rtrimstr(".rb"))' --args Formula/*.rb)"
+          echo "formulae=${formulae}" >> "${GITHUB_OUTPUT}"
+
+  build:
+    needs: discover
+    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        formula: ${{ fromJSON(needs.discover.outputs.formulae) }}
+    env:
+      # The two settings `brew test-bot` applies when it builds a formula.
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+    steps:
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@e99025eb970cfa124b8284a35463d87426917478 # 2026.09.28.1
+
+      - name: Restore Homebrew Bundler RubyGems
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.set-up-homebrew.outputs.gems-path }}
+          key: ${{ runner.os }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: ${{ runner.os }}-rubygems-
+
+      - name: Build, test and audit ${{ matrix.formula }}
+        env:
+          FORMULA: ${{ matrix.formula }}
+        run: scripts/ci-build-formula.sh "${FORMULA}"

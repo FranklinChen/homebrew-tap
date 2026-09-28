@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents (Claude Code, Codex, and others that read `AGENTS.md`) when working with code in this repository.
 
 ## Overview
 
@@ -15,6 +15,9 @@ This is a Homebrew tap (`FranklinChen/tap`) containing custom formulae for softw
   - `sather.rb`: GNU Sather compiler (source build, depends on bdw-gc; wrapper sets SATHER_HOME)
   - `unicon.rb`: Unicon compiler (Icon descendant; conflicts with the icon formula)
   - `camllight.rb`: Caml Light bytecode ML system (head-only, from personal fork `FranklinChen/camllight`; wrappers bake LIBDIR in at build time)
+- `scripts/ci-build-formula.sh`: builds one formula from source (adding `--HEAD` for head-only formulae), then runs `brew test`, `brew linkage --test` and `brew audit --strict` on it. CI runs it once per formula; it works the same locally.
+- `.github/workflows/tests.yml`: the CI workflow (see [Continuous Integration](#continuous-integration)).
+- `.github/dependabot.yml`: weekly Dependabot updates for the SHA-pinned GitHub Actions.
 
 ## Common Commands
 
@@ -36,24 +39,61 @@ brew test FranklinChen/tap/<formula>
 # reads the installed tap clone, so commit (or copy) your edit there first.
 brew audit --strict FranklinChen/tap/<formula>
 
-# Ruby style check (a subset of what audit covers)
-brew style Formula/<formula>.rb
+# Style check of the whole tap, exactly as CI runs it: RuboCop over the
+# formulae, plus shellcheck and shfmt over scripts/*.sh and actionlint over the
+# workflows (`brew style --fix .` applies the correctable fixes)
+brew style .
 
 # Check upstream for a newer version (uses the formula's `livecheck` block)
 brew livecheck FranklinChen/tap/<formula>
+
+# Exactly what CI does for one formula: source build, test, linkage, strict audit
+scripts/ci-build-formula.sh <formula>
 ```
+
+Homebrew refuses to build or audit anything when the installed Command Line Tools do not support the running macOS, even with Xcode.app selected. After a macOS upgrade, install the matching CLT first (`xcode-select --install`, or Software Update).
 
 ## Formula Conventions
 
 - Each formula is a Ruby class inheriting from `Formula`.
 - Formulae build from source using `system` calls to `make`/`configure`.
 - These are old codebases, so most formulae suppress warnings-as-errors from pre-ANSI/K&R C on modern clang (`-Wno-error=implicit-function-declaration`, `-Wno-error=implicit-int`, and similar). Each threads the flags through whatever its build system exposes: `hugs`/`f2c` via `ENV["CFLAGS"]`, `camllight` via make's `OPTS`, `sather` via `inreplace` of its `Makefile`/`CONFIG`. See [macOS Porting Patterns](#macos-porting-patterns).
-- Include a `test do` block that verifies the installed binary works.
+- Include a `test do` block that verifies the installed binary works. Assert on the program's output (`assert_equal`/`assert_match`), not just its exit status.
+- Reference other formulae's paths with `formula_opt_bin("x")`/`formula_opt_prefix("x")`, not `Formula["x"].opt_bin`; `brew style` enforces this (`Homebrew/FormulaPathMethods`).
+- Declare plain dependencies, not options (`:recommended`/`:optional`): a package's own configure script usually autodetects libraries whatever the option says, so an option cannot really turn a feature off. Homebrew's superenv already puts every dependency's `bin` on `PATH` and the non-keg-only ones' headers and libraries on the search paths, so set `CPPFLAGS`/`LDFLAGS` by hand only for a keg-only dependency or a build that ignores the environment. Where a build silently skips a feature whose library it cannot find (as hugs's bundled packages do), make `test do` assert the feature was built.
 - Head-only formulae (like `hugs`) require `--HEAD` for installation; versioned formulae (like `f2c`) do not.
 - Versioned formulae (`cm3`, `f2c`, `unicon`) carry a `livecheck` block so `brew livecheck` can detect new upstream releases. Head-only formulae have nothing to check.
-- License stanzas use an SPDX string where one fits (`unicon`, `sather`). Historical licenses with no SPDX id use `license :cannot_represent` (`cm3`) or omit the stanza with an explanatory comment (`camllight`); `f2c` (public-domain netlib code) omits it too.
+- License stanzas use an SPDX expression where one fits (`unicon`, `sather`, `f2c`), otherwise `license :cannot_represent` (`cm3`), otherwise no stanza (`camllight`, `hugs`). Decide an SPDX match against the template in `spdx/license-list-XML`, whose `<alt>` and `<optional>` markup defines which wording may vary, not by eye. A comment beside the stanza, or where it would go, records the evidence for each formula's choice.
 - Every formula must have a corresponding section in `README.md` documenting what the software is, the install command, and a brief history.
 - Every formula must have update instructions in the "Updating Formulae" section below.
+
+## Continuous Integration
+
+`.github/workflows/tests.yml` runs on every push to `master`, on pull requests, weekly (Monday 09:17 UTC), and on demand. The weekly run matters because the head-only formulae build whatever their forks' `master` holds, and Homebrew itself keeps changing, so a formula can break with no commit here.
+
+```mermaid
+flowchart LR
+    trigger([push / PR / weekly / manual]) --> syntax
+    trigger --> discover
+    syntax["syntax (macOS)<br/>brew test-bot --only-tap-syntax"]
+    discover["discover (Ubuntu)<br/>list Formula/*.rb as JSON"] --> build
+    build["build (macOS, one job per formula)<br/>scripts/ci-build-formula.sh:<br/>install --build-from-source [--HEAD],<br/>brew test, brew linkage --test,<br/>brew audit --strict"]
+```
+
+Design points a newcomer should know:
+
+- **The build matrix is discovered, not listed.** The `discover` job lists `Formula/*.rb`, so adding a formula adds its CI job automatically; there is no second list to keep in sync.
+- **`brew test-bot` is used only for tap syntax.** `--only-tap-syntax` runs `brew style`, `brew readall` and a non-strict `brew audit` over the whole tap. `brew style` on a tap is broader than its name suggests: besides RuboCop on the formulae it runs shellcheck (all optional checks enabled) and shfmt on `**/*.sh` and actionlint on the workflows, so those are gated without a step of their own.
+- **Builds bypass `brew test-bot`.** Its formula mode has no `--HEAD`, so it cannot build the head-only formulae, and it always builds bottles, which this tap does not publish. `scripts/ci-build-formula.sh` reproduces the per-formula checks that matter here: `brew test`, `brew linkage --test` (a library linked without a declared dependency fails it), and `brew audit --strict` with the keg installed. It asks `brew info --json=v2` whether the formula has a stable version and adds `--HEAD` if not. The build job also sets the two variables test-bot sets when building (`HOMEBREW_NO_AUTO_UPDATE`, `HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK`), so installing a dependency does not upgrade unrelated preinstalled software on the runner.
+- **`fail-fast: false`.** One broken formula must not cancel the jobs that would show the others still work.
+- **Concurrency.** A newer push to a pull request cancels that PR's running checks; runs on `master` and scheduled runs always finish. This matters because a free account gets few concurrent macOS runners, shared across all its repositories, and every run needs one per formula.
+- **Only the `syntax` job saves the RubyGems cache.** Build jobs install fewer gem groups, and `actions/cache` never overwrites an existing key, so a build job saving first would leave a cache the `syntax` job has to refill on every run. Build jobs use `actions/cache/restore`.
+- **macOS only.** The formulae are macOS ports (see below); there is no Linux job, just as the tap does not claim Linux support.
+- **The tap checkout is the workspace.** `Homebrew/actions/setup-homebrew` fetches this repository at the triggering commit, moves it into `GITHUB_WORKSPACE`, and symlinks it into Homebrew's `Taps/` directory. So the build job needs no `actions/checkout`, and `FranklinChen/tap/<formula>` resolves to the commit under test.
+- **Actions are pinned by commit SHA** with the version in a trailing comment, as `brew tap-new` generates them, and Dependabot proposes updates weekly. When editing the workflow by hand, look up the latest release of each action at edit time and pin its SHA; never copy a version from memory.
+- **Every shell script under `scripts/` must pass shellcheck and shfmt as `brew style .` runs them**, and the workflow must pass actionlint; the `syntax` job enforces all three through `brew style`.
+
+The README carries the workflow's status badge.
 
 ## macOS Porting Patterns
 

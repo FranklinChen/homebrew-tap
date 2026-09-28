@@ -1,5 +1,7 @@
 # My Homebrew tap
 
+[![CI](https://github.com/FranklinChen/homebrew-tap/actions/workflows/tests.yml/badge.svg)](https://github.com/FranklinChen/homebrew-tap/actions/workflows/tests.yml)
+
 To use my stuff:
 
 ```console
