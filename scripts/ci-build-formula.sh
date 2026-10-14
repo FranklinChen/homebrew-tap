@@ -18,11 +18,23 @@ fi
 
 readonly formula="FranklinChen/tap/$1"
 
+# One `brew info` answers both questions below. Each step is its own
+# assignment so that `set -e` sees a failure of either command.
+info="$(brew info --json=v2 "${formula}")"
+
+# `brew install` on an installed formula only warns and rebuilds nothing, so
+# the checks below would silently pass against an old build. CI runners start
+# clean; on a workstation, uninstall first to really test the formula.
+installed="$(jq '.formulae[0].installed | length' <<<"${info}")"
+if [[ "${installed}" -ne 0 ]]
+then
+  echo "$0: ${formula} is already installed; run 'brew uninstall ${formula}' first" >&2
+  exit 1
+fi
+
 # Head-only formulae (hugs, camllight) have no stable spec, so install and test
 # both need --HEAD. Ask Homebrew rather than keep a list here that could drift
 # from Formula/: `versions.stable` is a version string, or JSON null.
-# Each step is its own assignment so that `set -e` sees a failure of either.
-info="$(brew info --json=v2 "${formula}")"
 stable="$(jq -r '.formulae[0].versions.stable' <<<"${info}")"
 flags=(--verbose)
 if [[ "${stable}" == null ]]

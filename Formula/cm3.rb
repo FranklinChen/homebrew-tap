@@ -1,8 +1,8 @@
 class Cm3 < Formula
   desc "Critical Mass Modula-3 compiler and runtime"
   homepage "https://github.com/modula3/cm3"
-  url "https://github.com/modula3/cm3/archive/refs/tags/d5.12.0.tar.gz"
-  sha256 "517c0eaca6cde1cf9eae227d9e6e74e786e77ec5f927a4d5999e6c29ad819f2e"
+  url "https://github.com/modula3/cm3/archive/refs/tags/d5.12.1.tar.gz"
+  sha256 "a6b160041a9e1ea7049b2c5b244d02e59f4d0dc665e0a2a15cc3ddd2495ea7e3"
   license :cannot_represent
 
   livecheck do
@@ -11,54 +11,89 @@ class Cm3 < Formula
   end
 
   depends_on "cmake" => :build
-  depends_on "gnu-tar" => :build
   depends_on "ninja" => :build
+  # The m3odbc package links against iODBC, which macOS SDKs no longer ship.
+  depends_on "libiodbc"
 
+  # Transpiled C++ sources of a native Darwin compiler: each asset's
+  # CMakeLists.txt sets its own M3Target (ARM64_DARWIN or AMD64_DARWIN).
+  #
+  # These assets sit on the d5.12.0 release but were generated in May 2026
+  # from the post-d5.12.0 tree, in which EXTENDED is 64 bits on every target
+  # except AMD64_LINUX (upstream f10c386). The d5.12.0 source still selects
+  # 128-bit EXTENDED for Darwin, which this compiler rejects ("LOOPHOLE:
+  # expression's size (64) differs from type's (128)"), so the source must be
+  # d5.12.1 or later. Upstream's own release build of the d5.12.1 tag
+  # (.github/workflows/make-release.yml, run 25555020859) uses exactly this
+  # pairing: the d5.12.0 Darwin bootstrap with the d5.12.1 source.
   resource "bootstrap" do
-    url "https://github.com/modula3/cm3/releases/download/d5.12.0/cm3-boot-AMD64_LINUX-d5.12.0.tar.xz"
-    sha256 "a9c672958a29656856038b074addaa109c082f0bc2c7de3e3b98fd53d1bd636b"
+    on_arm do
+      url "https://github.com/modula3/cm3/releases/download/d5.12.0/cm3-boot-ARM64_DARWIN-d5.12.0.tar.xz"
+      sha256 "597d5a0ca1a91cfe9aee3ee25248d941f021e14d1e81495ab76ac562f5e42f57"
+    end
+    on_intel do
+      url "https://github.com/modula3/cm3/releases/download/d5.12.0/cm3-boot-AMD64_DARWIN-d5.12.0.tar.xz"
+      sha256 "6a5c4960a2e51f3c18ce3f660193a4d672255df6debd467d3b86a5f9afbf071c"
+    end
   end
 
   def install
-    # Stage bootstrap C++ sources
     bootstrap_dir = buildpath/"bootstrap"
-    resource("bootstrap").stage do
-      # The bootstrap tarball contains hardlinks that BSD tar cannot handle;
-      # if Homebrew's built-in extraction left an empty directory, re-extract
-      # with GNU tar.
-      if Dir.empty?(Dir.pwd)
-        gtar = Formula["gnu-tar"].opt_bin/"gtar"
-        cached = resource("bootstrap").cached_download
-        mkdir_p bootstrap_dir
-        system gtar.to_s, "-xf", cached.to_s, "-C", bootstrap_dir.to_s, "--strip-components=1"
-      else
-        bootstrap_dir.install Dir["*"]
-      end
-    end
+    resource("bootstrap").stage(bootstrap_dir)
 
-    # Stage 1: build bootstrap cm3 + mklib from transpiled C++ sources
+    # Stage 1: build bootstrap cm3 + mklib from transpiled C++ sources.
+    #
+    # Everything installs into libexec, not the prefix: cm3 finds its
+    # configuration beside its own executable (bin/cm3.cfg sets INSTALL_ROOT
+    # to bin/.., then reads bin/config/<TARGET>, pkg/ and lib/), and Homebrew
+    # allows only executables in bin. The executables are wrapped below.
     boot_build = buildpath/"boot-build"
     system "cmake", "-S", bootstrap_dir, "-B", boot_build,
            "-G", "Ninja",
-           "-DCMAKE_INSTALL_PREFIX=#{prefix}"
+           "-DCMAKE_INSTALL_PREFIX=#{libexec}"
     system "cmake", "--build", boot_build
     system "cmake", "--install", boot_build
 
+    # cm3's per-target config names the ODBC libraries, but assumes they are
+    # on the default search path: ARM64_DARWIN uses -L/opt/homebrew/lib, and
+    # Darwin.common gives AMD64_DARWIN no -L at all. Homebrew's libiodbc is
+    # keg-only (it conflicts with unixodbc), so neither finds it. Override the
+    # entry at the end of the target's config; stage 2 installs that config
+    # into libexec/bin/config, so the installed compiler links ODBC programs.
+    (buildpath/"m3-sys/cminstall/src/config"/m3_target).append_lines <<~QUAKE
+
+      % Homebrew override: keg-only libiodbc.
+      SYSTEM_LIBS{"ODBC"} = ["-L#{formula_opt_lib("libiodbc")}", "-liodbc", "-liodbcinst"]
+    QUAKE
+
     # Stage 2: full upgrade from Modula-3 sources (headless, no X11/GUI)
-    ENV.prepend_path "PATH", bin
-    ENV["CM3_INSTALL"] = prefix.to_s
+    ENV.prepend_path "PATH", libexec/"bin"
+    ENV["CM3_INSTALL"] = libexec.to_s
     system "python3", "scripts/concierge.py", "full-upgrade", "--backend", "c", "headless"
 
     # Re-sign Mach-O binaries: the build modifies them after linking,
     # invalidating ad-hoc code signatures (same pattern as unicon.rb).
-    [bin, lib].each do |dir|
-      Dir[dir/"**/*"].each do |f|
-        next if !File.file?(f) || File.symlink?(f)
-
-        mime = `file -b #{f}`
-        system "codesign", "-fs", "-", f if mime.include?("Mach-O")
-      end
+    # safe_popen_read runs `file` without a shell and fails loudly.
+    mach_o = Dir[libexec/"{bin,lib}/**/*"].select do |f|
+      File.file?(f) && !File.symlink?(f) &&
+        Utils.safe_popen_read("file", "-b", f).include?("Mach-O")
     end
+    system "codesign", "-fs", "-", *mach_o
+
+    # Wrap every executable in libexec/bin. A wrapper execs the binary by its
+    # path, so cm3 finds cm3.cfg beside it; a symlink would leave it looking
+    # in Homebrew's bin. The path is the version-independent opt one: cm3
+    # bakes INSTALL_ROOT into the rpaths and -L flags of programs it builds,
+    # and a Cellar path would break those programs on the next upgrade.
+    programs = (libexec/"bin").children.select { |f| f.file? && f.executable? }
+    bin.write_exec_script programs.map { |f| opt_libexec/"bin"/f.basename }
+    man.install Dir[libexec/"man/*"]
+  end
+
+  # The cm3 target name for this Mac; it also names the build output
+  # directory, which the test needs.
+  def m3_target
+    Hardware::CPU.arm? ? "ARM64_DARWIN" : "AMD64_DARWIN"
   end
 
   def caveats
@@ -88,11 +123,6 @@ class Cm3 < Formula
     system bin/"cm3", "-build"
 
     # Output lands in a target-specific subdirectory
-    target = if Hardware::CPU.arm?
-      "ARM64_DARWIN"
-    else
-      "AMD64_DARWIN"
-    end
-    assert_equal "Hello from CM3!\n", shell_output("#{testpath}/#{target}/hello")
+    assert_equal "Hello from CM3!\n", shell_output("#{testpath}/#{m3_target}/hello")
   end
 end

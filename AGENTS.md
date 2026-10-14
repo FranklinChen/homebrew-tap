@@ -9,13 +9,13 @@ This is a Homebrew tap (`FranklinChen/tap`) containing custom formulae for softw
 ## Repository Structure
 
 - `Formula/`: Homebrew formula Ruby files (one `.rb` per package)
-  - `cm3.rb`: Critical Mass Modula-3 compiler (three-stage bootstrap: C++ to bootstrap cm3 to full self-compile)
+  - `cm3.rb`: Critical Mass Modula-3 compiler (native Darwin C++ bootstrap, then a full self-compile into `libexec`, wrapped from `bin`)
   - `f2c.rb`: Fortran-to-C compiler (versioned release from netlib, with a `resource` block for `libf2c`)
   - `hugs.rb`: Hugs98+ Haskell implementation (head-only, from personal fork `FranklinChen/hugs98-plus-Sep2006`)
   - `sather.rb`: GNU Sather compiler (source build, depends on bdw-gc; wrapper sets SATHER_HOME)
   - `unicon.rb`: Unicon compiler (Icon descendant; conflicts with the icon formula)
   - `camllight.rb`: Caml Light bytecode ML system (head-only, from personal fork `FranklinChen/camllight`; wrappers bake LIBDIR in at build time)
-- `scripts/ci-build-formula.sh`: builds one formula from source (adding `--HEAD` for head-only formulae), then runs `brew test`, `brew linkage --test` and `brew audit --strict` on it. CI runs it once per formula; it works the same locally.
+- `scripts/ci-build-formula.sh`: builds one formula from source (adding `--HEAD` for head-only formulae), then runs `brew test`, `brew linkage --test` and `brew audit --strict` on it. CI runs it once per formula; locally it works the same but refuses a formula that is already installed (the script says why).
 - `.github/workflows/tests.yml`: the CI workflow (see [Continuous Integration](#continuous-integration)).
 - `.github/dependabot.yml`: weekly Dependabot updates for the SHA-pinned GitHub Actions.
 
@@ -100,21 +100,24 @@ The README carries the workflow's status badge.
 Every package here predates Apple Silicon and most predate macOS, so the formulae share a handful of recurring fixes. Knowing these saves rediscovering them per formula:
 
 - **Re-signing Mach-O binaries.** `cm3` and `unicon` both run `codesign -fs -` over their installed binaries at the end of `install`. Their build steps rewrite the executables after linking (cm3's backend relinks; unicon's `patchstr` embeds install paths), which invalidates the linker's ad-hoc code signature; an invalid signature makes macOS `SIGKILL` the binary on launch. The loop skips symlinks and non-Mach-O files, detected via `file -b`.
-- **Baking the prefix in, or wrapping.** Homebrew installs into a versioned Cellar directory that is symlinked into the prefix, which breaks programs that locate their own runtime by path. Three solutions appear here: `camllight` bakes `LIBDIR` into its wrapper scripts at build time, so `LIBDIR` must be set on the `world` step, not just `install`; `sather` installs its runtime tree into `libexec` and ships a `bin/sacomp` shell wrapper that exports `SATHER_HOME`; `unicon` rewrites self-executing `icode` programs into wrappers that `exec iconx` with an absolute path, because icode cannot be read back through the Cellar symlink.
+- **Baking the prefix in, or wrapping.** Homebrew installs into a versioned Cellar directory that is symlinked into the prefix, which breaks programs that locate their own runtime by path. Four solutions appear here: `cm3` installs its whole tree into `libexec`, because it finds `cm3.cfg` beside its own executable, and wraps each program from `bin` with `write_exec_script`; `camllight` bakes `LIBDIR` into its wrapper scripts at build time, so `LIBDIR` must be set on the `world` step, not just `install`; `sather` installs its runtime tree into `libexec` and ships a `bin/sacomp` shell wrapper that exports `SATHER_HOME`; `unicon` rewrites self-executing `icode` programs into wrappers that `exec iconx` with an absolute path, because icode cannot be read back through the Cellar symlink.
 - **`inreplace` for Linux-isms.** `sather` is the heaviest example: it patches its `Makefile` and headers to swap `/lib/cpp` for `cc -E`, drop the missing `<values.h>`, and replace `echo -n` with `printf` (macOS `/bin/sh` `echo` has no `-n`). When a source build assumes GNU/Linux, prefer `inreplace` over carrying patch files.
 - **Old-C warning suppression** (see Formula Conventions above) is the fourth recurring fix.
 
 ## Updating Formulae
 
-When a new upstream release is available, update the formula as described below. Always recompute SHA256 hashes from the actual downloaded files (`curl -sL <url> | shasum -a 256`), never guess.
+When a new upstream release is available, update the formula as described below. Always recompute SHA256 hashes from the actual downloaded files (`curl -sL <url> | shasum -a 256`), never guess. A checksum failure on an unchanged formula means upstream replaced a file in place (cm3's release assets have been re-uploaded twice, see `d804c1d`): download it again and find out what changed before re-pinning.
 
 ### cm3.rb
 
-Upstream releases are at <https://github.com/modula3/cm3/releases>. Three things need updating:
+Upstream is at <https://github.com/modula3/cm3>. The source and the bootstrap come from different places and are updated independently:
 
-1. **Main source URL + SHA256**: replace the tag in the `url` (e.g. `d5.12.0` to `d5.13.0`) and recompute the `sha256` for the new archive.
-2. **Bootstrap resource URL + SHA256**: replace the tag and version in the resource `url`. The asset filename includes the version (e.g. `cm3-boot-AMD64_LINUX-d5.12.0.tar.xz`). Despite the `AMD64_LINUX` name, this tarball works on all 64-bit little-endian Unix including macOS (both Intel and Apple Silicon); there is no separate macOS asset. Check the release assets page for the exact filename, then recompute the `sha256`.
-3. The version is inferred from the URL, so no separate `version` field to change.
+- **Source** (`url` + `sha256`): a git tag's archive, e.g. `archive/refs/tags/d5.12.1.tar.gz`. Tags appear without GitHub releases (d5.12.1 has none), so `livecheck` follows tags. To update, replace the tag and recompute the `sha256`; the version is inferred from the URL.
+- **Bootstrap** (the `bootstrap` resource, one `url`/`sha256` pair under `on_arm` and one under `on_intel`): the native `cm3-boot-ARM64_DARWIN-<release>.tar.xz` and `cm3-boot-AMD64_DARWIN-<release>.tar.xz` assets of a published release. Each one's `CMakeLists.txt` sets its own `M3Target`, so stage 1 builds a native compiler; never substitute the `AMD64_LINUX` asset. Change the bootstrap only when a newer release publishes Darwin assets.
+
+**The bootstrap must be compatible with the source.** An older bootstrap compiling newer source is the normal pattern; the reverse can fail. The comment on the `bootstrap` resource records why the current pins pair as they do and where upstream builds the same pairing. Before bumping either, check which bootstrap upstream's `.github/workflows/make-release.yml` uses at the new tag, then run `scripts/ci-build-formula.sh cm3`.
+
+**ODBC needs an explicit library path.** `install` appends a `SYSTEM_LIBS{"ODBC"}` override for keg-only `libiodbc` to the target's config (the comment there explains why). Without it, stage 2 stops at `ld: library 'iodbc' not found` while linking `m3odbc`. Re-check it on a bump, since upstream may fix the path.
 
 ### f2c.rb
 
