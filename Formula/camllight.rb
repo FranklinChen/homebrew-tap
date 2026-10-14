@@ -1,9 +1,14 @@
 class Camllight < Formula
   desc "Bytecode implementation of Caml, a 1990s ML-family functional language"
   homepage "https://github.com/FranklinChen/camllight"
+  # sources/LICENSE: the compiler is under the Q Public License 1.0, the
+  # library (runtime, config, contrib, lib) under the GNU Library GPL
+  # version 2 (no "or later") with a static-linking exception. That exception
+  # is SPDX's OCaml-LGPL-linking-exception except that it still reads
+  # "clause 3", the typo OCaml fixed to "clause 2" in 2007, which the SPDX
+  # template does not accept, so it is not encoded here.
+  license all_of: ["QPL-1.0", "LGPL-2.0-only"]
   head "https://github.com/FranklinChen/camllight.git", branch: "master"
-  # Distributed under the historical INRIA Caml license (a QPL-style license),
-  # which has no standard SPDX identifier, so no `license` stanza is given.
 
   def install
     # Caml Light is pre-ANSI K&R-era C. Modern clang rejects it by default, so
