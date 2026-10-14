@@ -16,6 +16,7 @@ This is a Homebrew tap (`FranklinChen/tap`) containing custom formulae for softw
   - `unicon.rb`: Unicon compiler (Icon descendant; conflicts with the icon formula)
   - `camllight.rb`: Caml Light bytecode ML system (head-only, from personal fork `FranklinChen/camllight`; wrappers bake LIBDIR in at build time)
 - `scripts/ci-build-formula.sh`: builds one formula from source (adding `--HEAD` for head-only formulae), then runs `brew test`, `brew linkage --test` and `brew audit --strict` on it. CI runs it once per formula; locally it works the same but refuses a formula that is already installed (the script says why).
+- `scripts/check-formula-locally.sh`: runs `ci-build-formula.sh` on a workstation against the formula in this working tree. It copies the formula into Homebrew's own clone of the tap, runs the check, and restores the clone on exit.
 - `.github/workflows/tests.yml`: the CI workflow (see [Continuous Integration](#continuous-integration)).
 - `.github/dependabot.yml`: weekly Dependabot updates for the SHA-pinned GitHub Actions.
 
@@ -28,15 +29,14 @@ brew install FranklinChen/tap/f2c
 # Install a head-only formula
 brew install --HEAD FranklinChen/tap/hugs
 
-# Force a local source build: run this after editing a formula, before committing
-brew install --build-from-source FranklinChen/tap/<formula>
+# After editing a formula, before committing: what CI does, against THIS
+# working tree (its header says why a bare `brew install` would build the
+# old formula). Uninstall the formula first.
+scripts/check-formula-locally.sh <formula>
 
-# Run the formula's `test do` block against the installed binary
+# Test or audit an installed formula on its own. Both act on Homebrew's clone
+# of the tap, not this working tree; Homebrew disabled the path form of audit.
 brew test FranklinChen/tap/<formula>
-
-# Audit for correctness and style problems (run before every commit).
-# Current Homebrew disabled the path form; audit by tap-qualified name, which
-# reads the installed tap clone, so commit (or copy) your edit there first.
 brew audit --strict FranklinChen/tap/<formula>
 
 # Style check of the whole tap, exactly as CI runs it: RuboCop over the
@@ -46,9 +46,6 @@ brew style .
 
 # Check upstream for a newer version (uses the formula's `livecheck` block)
 brew livecheck FranklinChen/tap/<formula>
-
-# Exactly what CI does for one formula: source build, test, linkage, strict audit
-scripts/ci-build-formula.sh <formula>
 ```
 
 Homebrew refuses to build or audit anything when the installed Command Line Tools do not support the running macOS, even with Xcode.app selected. After a macOS upgrade, install the matching CLT first (`xcode-select --install`, or Software Update).
@@ -57,10 +54,10 @@ Homebrew refuses to build or audit anything when the installed Command Line Tool
 
 - Each formula is a Ruby class inheriting from `Formula`.
 - Formulae build from source using `system` calls to `make`/`configure`.
-- These are old codebases, so most formulae suppress warnings-as-errors from pre-ANSI/K&R C on modern clang (`-Wno-error=implicit-function-declaration`, `-Wno-error=implicit-int`, and similar). Each threads the flags through whatever its build system exposes: `hugs`/`f2c` via `ENV["CFLAGS"]`, `camllight` via make's `OPTS`, `sather` via `inreplace` of its `Makefile`/`CONFIG`. See [macOS Porting Patterns](#macos-porting-patterns).
+- These are old codebases, so most formulae suppress warnings-as-errors from pre-ANSI/K&R C on modern clang (`-Wno-error=implicit-function-declaration`, `-Wno-error=implicit-int`, and similar). Each threads the flags through whatever its build system exposes: `hugs`/`f2c` via `ENV["CFLAGS"]`, `camllight` via make's `OPTS`, `sather` via `inreplace` of its `Makefile`/`CONFIG`. Where `configure` comes from autoconf 2.72 or later, also pass `-std=gnu17`: that autoconf switches to `-std=gnu23` when it can, and C23 rejects K&R definitions (`hugs`; see its comments). See [macOS Porting Patterns](#macos-porting-patterns).
 - Include a `test do` block that verifies the installed binary works. Assert on the program's output (`assert_equal`/`assert_match`), not just its exit status.
 - Reference other formulae's paths with `formula_opt_bin("x")`/`formula_opt_prefix("x")`, not `Formula["x"].opt_bin`; `brew style` enforces this (`Homebrew/FormulaPathMethods`).
-- Declare plain dependencies, not options (`:recommended`/`:optional`): a package's own configure script usually autodetects libraries whatever the option says, so an option cannot really turn a feature off. Homebrew's superenv already puts every dependency's `bin` on `PATH` and the non-keg-only ones' headers and libraries on the search paths, so set `CPPFLAGS`/`LDFLAGS` by hand only for a keg-only dependency or a build that ignores the environment. Where a build silently skips a feature whose library it cannot find (as hugs's bundled packages do), make `test do` assert the feature was built.
+- Declare plain dependencies, not options (`:recommended`/`:optional`): a package's own configure script usually autodetects libraries whatever the option says, so an option cannot really turn a feature off. Homebrew's superenv already puts every dependency's `bin` on `PATH` and the non-keg-only ones' headers and libraries on the search paths, so set `CPPFLAGS`/`LDFLAGS` by hand only for a keg-only dependency or a build that ignores the environment. Where a build silently skips a feature whose library it cannot find (as hugs's bundled packages do), make `test do` use the feature, not check that its files exist: a skipped hugs package still installs its sources, so only importing it proves it built.
 - Head-only formulae (like `hugs`) require `--HEAD` for installation; versioned formulae (like `f2c`) do not.
 - Versioned formulae (`cm3`, `f2c`, `unicon`) carry a `livecheck` block so `brew livecheck` can detect new upstream releases. Head-only formulae have nothing to check.
 - License stanzas use an SPDX expression where one fits (`unicon`, `sather`, `f2c`), otherwise `license :cannot_represent` (`cm3`), otherwise no stanza (`camllight`, `hugs`). Decide an SPDX match against the template in `spdx/license-list-XML`, whose `<alt>` and `<optional>` markup defines which wording may vary, not by eye. A comment beside the stanza, or where it would go, records the evidence for each formula's choice.
@@ -84,7 +81,7 @@ Design points a newcomer should know:
 
 - **The build matrix is discovered, not listed.** The `discover` job lists `Formula/*.rb`, so adding a formula adds its CI job automatically; there is no second list to keep in sync.
 - **`brew test-bot` is used only for tap syntax.** `--only-tap-syntax` runs `brew style`, `brew readall` and a non-strict `brew audit` over the whole tap. `brew style` on a tap is broader than its name suggests: besides RuboCop on the formulae it runs shellcheck (all optional checks enabled) and shfmt on `**/*.sh` and actionlint on the workflows, so those are gated without a step of their own.
-- **Builds bypass `brew test-bot`.** Its formula mode has no `--HEAD`, so it cannot build the head-only formulae, and it always builds bottles, which this tap does not publish. `scripts/ci-build-formula.sh` reproduces the per-formula checks that matter here: `brew test`, `brew linkage --test` (a library linked without a declared dependency fails it), and `brew audit --strict` with the keg installed. It asks `brew info --json=v2` whether the formula has a stable version and adds `--HEAD` if not. The build job also sets the two variables test-bot sets when building (`HOMEBREW_NO_AUTO_UPDATE`, `HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK`), so installing a dependency does not upgrade unrelated preinstalled software on the runner.
+- **Builds bypass `brew test-bot`.** Its formula mode has no `--HEAD`, so it cannot build the head-only formulae, and it always builds bottles, which this tap does not publish. `scripts/ci-build-formula.sh` reproduces the per-formula checks that matter here: `brew test`, `brew linkage --test` (a library linked without a declared dependency fails it), and `brew audit --strict` with the keg installed. It asks `brew info --json=v2` whether the formula has a stable version and adds `--HEAD` if not. The script also exports the variables test-bot sets when building (`HOMEBREW_NO_AUTO_UPDATE`, `HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK`), so installing a dependency does not upgrade unrelated preinstalled software on the runner.
 - **`fail-fast: false`.** One broken formula must not cancel the jobs that would show the others still work.
 - **Concurrency.** A newer push to a pull request cancels that PR's running checks; runs on `master` and scheduled runs always finish. This matters because a free account gets few concurrent macOS runners, shared across all its repositories, and every run needs one per formula.
 - **Only the `syntax` job saves the RubyGems cache.** Build jobs install fewer gem groups, and `actions/cache` never overwrites an existing key, so a build job saving first would leave a cache the `syntax` job has to refill on every run. Build jobs use `actions/cache/restore`.
@@ -103,6 +100,8 @@ Every package here predates Apple Silicon and most predate macOS, so the formula
 - **Baking the prefix in, or wrapping.** Homebrew installs into a versioned Cellar directory that is symlinked into the prefix, which breaks programs that locate their own runtime by path. Four solutions appear here: `cm3` installs its whole tree into `libexec`, because it finds `cm3.cfg` beside its own executable, and wraps each program from `bin` with `write_exec_script`; `camllight` bakes `LIBDIR` into its wrapper scripts at build time, so `LIBDIR` must be set on the `world` step, not just `install`; `sather` installs its runtime tree into `libexec` and ships a `bin/sacomp` shell wrapper that exports `SATHER_HOME`; `unicon` rewrites self-executing `icode` programs into wrappers that `exec iconx` with an absolute path, because icode cannot be read back through the Cellar symlink.
 - **`inreplace` for Linux-isms.** `sather` is the heaviest example: it patches its `Makefile` and headers to swap `/lib/cpp` for `cc -E`, drop the missing `<values.h>`, and replace `echo -n` with `printf` (macOS `/bin/sh` `echo` has no `-n`). When a source build assumes GNU/Linux, prefer `inreplace` over carrying patch files.
 - **Old-C warning suppression** (see Formula Conventions above) is the fourth recurring fix.
+- **Distrust a package's Makefile rules for regenerating itself.** A Makefile that remakes `configure` from file timestamps and re-runs it without the original arguments silently moves the install to `/usr/local`; `make -o configure` marks it up to date (`hugs`; see its comments).
+- **Hard-coded search paths outside the prefix.** A default path that checks `/usr/local` before the install's own files lets an older copy there shadow the Homebrew one; `inreplace` it out (`hugs`). A test of such a tool must pin its search path to the keg, or it can pass on someone else's files.
 
 ## Updating Formulae
 
@@ -115,7 +114,7 @@ Upstream is at <https://github.com/modula3/cm3>. The source and the bootstrap co
 - **Source** (`url` + `sha256`): a git tag's archive, e.g. `archive/refs/tags/d5.12.1.tar.gz`. Tags appear without GitHub releases (d5.12.1 has none), so `livecheck` follows tags. To update, replace the tag and recompute the `sha256`; the version is inferred from the URL.
 - **Bootstrap** (the `bootstrap` resource, one `url`/`sha256` pair under `on_arm` and one under `on_intel`): the native `cm3-boot-ARM64_DARWIN-<release>.tar.xz` and `cm3-boot-AMD64_DARWIN-<release>.tar.xz` assets of a published release. Each one's `CMakeLists.txt` sets its own `M3Target`, so stage 1 builds a native compiler; never substitute the `AMD64_LINUX` asset. Change the bootstrap only when a newer release publishes Darwin assets.
 
-**The bootstrap must be compatible with the source.** An older bootstrap compiling newer source is the normal pattern; the reverse can fail. The comment on the `bootstrap` resource records why the current pins pair as they do and where upstream builds the same pairing. Before bumping either, check which bootstrap upstream's `.github/workflows/make-release.yml` uses at the new tag, then run `scripts/ci-build-formula.sh cm3`.
+**The bootstrap must be compatible with the source.** An older bootstrap compiling newer source is the normal pattern; the reverse can fail. The comment on the `bootstrap` resource records why the current pins pair as they do and where upstream builds the same pairing. Before bumping either, check which bootstrap upstream's `.github/workflows/make-release.yml` uses at the new tag, then run `scripts/check-formula-locally.sh cm3`.
 
 **ODBC needs an explicit library path.** `install` appends a `SYSTEM_LIBS{"ODBC"}` override for keg-only `libiodbc` to the target's config (the comment there explains why). Without it, stage 2 stops at `ld: library 'iodbc' not found` while linking `m3odbc`. Re-check it on a bump, since upstream may fix the path.
 
@@ -128,7 +127,7 @@ Upstream is at <https://www.netlib.org/f2c/>. The URLs (`src.tgz`, `libf2c.zip`)
 
 ### hugs.rb
 
-Head-only formula: always builds from the latest git commit of <https://github.com/FranklinChen/hugs98-plus-Sep2006>. No version or SHA256 to update. Only update if dependencies or build steps change.
+Head-only formula: always builds from the latest git commit of <https://github.com/FranklinChen/hugs98-plus-Sep2006>. No version or SHA256 to update. Only update if dependencies or build steps change. The fork's own `tools/ci/build.sh` is the reference recipe (its `CFLAGS` and `make -o configure` are mirrored in the formula); compare against it when the fork changes. Its test loads the module list from the fork's `tools/ci/check.py`; keep the two in step.
 
 ### sather.rb
 

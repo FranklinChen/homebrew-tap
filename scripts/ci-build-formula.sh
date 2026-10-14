@@ -10,6 +10,14 @@
 # the same locally on a machine where the tap is installed.
 set -euo pipefail
 
+# The environment `brew test-bot` sets when it builds a formula: installing a
+# dependency must not update Homebrew or upgrade unrelated installed software.
+# Also skip the cleanup `brew install` runs afterwards (on all packages every
+# 30 days), which on a workstation has nothing to do with this check.
+export HOMEBREW_NO_AUTO_UPDATE=1
+export HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1
+export HOMEBREW_NO_INSTALL_CLEANUP=1
+
 if [[ $# -ne 1 ]]
 then
   echo "usage: $0 <formula-name>" >&2

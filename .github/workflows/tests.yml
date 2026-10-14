@@ -70,10 +70,6 @@ jobs:
       fail-fast: false
       matrix:
         formula: ${{ fromJSON(needs.discover.outputs.formulae) }}
-    env:
-      # The two settings `brew test-bot` applies when it builds a formula.
-      HOMEBREW_NO_AUTO_UPDATE: 1
-      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
