@@ -39,8 +39,8 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.set-up-homebrew.outputs.gems-path }}
-          key: ${{ runner.os }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
-          restore-keys: ${{ runner.os }}-rubygems-
+          key: ${{ runner.os }}-${{ runner.arch }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-rubygems-
 
       - run: brew test-bot --only-cleanup-before
 
@@ -65,18 +65,14 @@ jobs:
 
   build:
     needs: discover
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-26
+    # A safety cap well above any expected build (cm3 takes about 10 minutes
+    # locally), so a hung build cannot hold a macOS runner for six hours.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
         formula: ${{ fromJSON(needs.discover.outputs.formulae) }}
-        os: [macos-26]
-        # Hugs exists to run on old hardware, so it is also built on Intel,
-        # while Homebrew still runs there (until September 2027 at the
-        # earliest, per docs.brew.sh/Support-Tiers).
-        include:
-          - formula: hugs
-            os: macos-15-intel
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
@@ -86,10 +82,33 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.set-up-homebrew.outputs.gems-path }}
-          key: ${{ runner.os }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
-          restore-keys: ${{ runner.os }}-rubygems-
+          key: ${{ runner.os }}-${{ runner.arch }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-rubygems-
 
       - name: Build, test and audit ${{ matrix.formula }}
         env:
           FORMULA: ${{ matrix.formula }}
         run: scripts/ci-build-formula.sh "${FORMULA}"
+
+  # Hugs exists to run on old hardware, so it can also be built on Intel.
+  # Manual runs only: Homebrew no longer builds Intel bottles, so every
+  # dependency builds from source there (see AGENTS.md, Continuous
+  # Integration). Run it from the Actions tab with "Run workflow".
+  hugs-intel:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15-intel
+    timeout-minutes: 180
+    steps:
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@eb02c69dbabdb66ff183c614f4ce7ab3c077592c # 2026.10.12.1
+
+      - name: Cache Homebrew Bundler RubyGems
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.set-up-homebrew.outputs.gems-path }}
+          key: ${{ runner.os }}-${{ runner.arch }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-rubygems-
+
+      - name: Build, test and audit hugs on Intel
+        run: scripts/ci-build-formula.sh hugs

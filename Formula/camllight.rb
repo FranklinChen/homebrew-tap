@@ -11,22 +11,19 @@ class Camllight < Formula
   head "https://github.com/FranklinChen/camllight.git", branch: "master"
 
   def install
-    # Caml Light is pre-ANSI K&R-era C. Modern clang rejects it by default, so
-    # the same warning-suppression flags the project's CI uses are required.
-    opts = "-O2 -Wno-implicit-int -Wno-deprecated-non-prototype " \
-           "-Wno-pointer-sign -Wno-implicit-function-declaration"
-
+    # Caml Light is pre-ANSI K&R-era C; the fork's Makefile carries the flags
+    # modern clang needs as its default OPTS, so none are passed here.
     cd "sources/src" do
       # `configure` probes the host (int/pointer sizes, endianness, libc) and
       # writes ../config/m.h and ../config/s.h.
-      system "make", "CC=#{ENV.cc}", "OPTS=#{opts}", "configure"
+      system "make", "CC=#{ENV.cc}", "configure"
 
       # The user-facing wrapper scripts (camlc, camllight, camlmktop) have
       # LIBDIR and CC baked in by sed during the `launch` step of `world`, NOT
       # at install time. So BINDIR/LIBDIR/CC must be set on THIS line, or the
       # installed `camllight` will point -stdlib at /usr/local and break under
       # the Homebrew prefix.
-      system "make", "CC=#{ENV.cc}", "OPTS=#{opts}",
+      system "make", "CC=#{ENV.cc}",
              "BINDIR=#{bin}", "LIBDIR=#{lib}/caml-light", "world"
 
       # `install` copies camlrun and the wrappers into BINDIR, the bytecode
