@@ -11,12 +11,12 @@ class Unicon < Formula
   end
 
   depends_on "freetype"
-  depends_on "libjpeg"
+  depends_on "jpeg"
   depends_on "libpng"
   depends_on "libx11"
   depends_on "libxft"
   depends_on "libxpm"
-  depends_on "openssl"
+  depends_on "openssl@3"
 
   conflicts_with "icon", because: "both install `icont` and `iconx` binaries"
 
