@@ -65,11 +65,18 @@ jobs:
 
   build:
     needs: discover
-    runs-on: macos-26
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         formula: ${{ fromJSON(needs.discover.outputs.formulae) }}
+        os: [macos-26]
+        # Hugs exists to run on old hardware, so it is also built on Intel,
+        # while Homebrew still runs there (until September 2027 at the
+        # earliest, per docs.brew.sh/Support-Tiers).
+        include:
+          - formula: hugs
+            os: macos-15-intel
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew

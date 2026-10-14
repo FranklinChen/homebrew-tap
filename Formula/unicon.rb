@@ -40,12 +40,16 @@ class Unicon < Formula
     # does not SIGKILL them. Also replace icode programs (shell scripts with
     # embedded bytecode) with wrappers, since iconx cannot read icode through
     # Homebrew's Cellar-to-prefix symlinks.
+    #
+    # Programs that unicon compiles record this keg's iconx path (IXBIN), but
+    # fall back to `iconx` on PATH, so they keep running after an upgrade.
+    mach_o = []
     Dir[bin/"*"].each do |f|
       next if !File.file?(f) || File.symlink?(f)
 
-      mime = `file -b #{f}`
-      if mime.include?("Mach-O")
-        system "codesign", "-fs", "-", f
+      # safe_popen_read runs `file` without a shell and fails loudly.
+      if Utils.safe_popen_read("file", "-b", f).include?("Mach-O")
+        mach_o << f
       elsif File.open(f, "rb") { |io| io.read(512) }&.include?("executable Icon binary follows")
         real = "#{f}.real"
         mv f, real
@@ -56,6 +60,7 @@ class Unicon < Formula
         chmod 0755, f
       end
     end
+    system "codesign", "-fs", "-", *mach_o
   end
 
   def caveats
