@@ -66,6 +66,20 @@ class Cm3 < Formula
       SYSTEM_LIBS{"ODBC"} = ["-L#{formula_opt_lib("libiodbc")}", "-liodbc", "-liodbcinst"]
     QUAKE
 
+    # concierge overwrites the installed compiler between self-build passes.
+    # macOS caches signatures by file identity, so overwriting an executable
+    # can SIGKILL the next launch even when its signature is valid on disk.
+    # Copy to a fresh file and atomically replace it before running it again.
+    # https://developer.apple.com/documentation/security/updating-mac-software
+    inreplace "scripts/concierge.py",
+              "                self.cp(item, dst)\n            else:",
+              [
+                "                self.cp(item, dst / (exe + \".new\"))",
+                "                if not self.no_action():",
+                "                    os.replace(dst / (exe + \".new\"), dst / exe)",
+                "            else:",
+              ].join("\n")
+
     # Stage 2: full upgrade from Modula-3 sources (headless, no X11/GUI)
     ENV.prepend_path "PATH", libexec/"bin"
     ENV["CM3_INSTALL"] = libexec.to_s
